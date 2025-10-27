@@ -1,0 +1,232 @@
+@{
+    ViewBag.Title = "GraphQL Query Executor";
+}
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>GraphQL Query Executor</h1>
+            <p class="text-muted">Execute GraphQL queries against http://localhost:4000</p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5>GraphQL Query</h5>
+                </div>
+                <div class="card-body">
+                    <form id="graphqlForm">
+                        <div class="form-group">
+                            <label for="queryInput">Query:</label>
+                            <textarea class="form-control" id="queryInput" name="query" rows="10" placeholder="Enter your GraphQL query here...
+Example:
+{
+  users {
+    id
+    name
+    email
+  }
+}"></textarea>
+                            <small class="form-text text-muted">Paste your GraphQL query here</small>
+                        </div>
+
+                        <div class="form-group mt-3">
+                            <button type="button" class="btn btn-primary" id="executeBtn">
+                                <i class="bi bi-play-fill"></i> Execute Query
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="clearBtn">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p class="mt-2">Executing query...</p>
+    </div>
+
+    <!-- Results Table -->
+    <div id="resultsContainer" class="mt-4" style="display: none;">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5>Results</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="resultsTable" class="table table-striped table-hover">
+                        <thead class="table-dark">
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="errorContainer" class="alert alert-danger mt-4" role="alert" style="display: none;">
+        <h4 class="alert-heading">Error!</h4>
+        <p id="errorMessage"></p>
+    </div>
+
+    <!-- Raw JSON Response -->
+    <div id="rawDataContainer" class="mt-4" style="display: none;">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5>Raw JSON Response</h5>
+            </div>
+            <div class="card-body">
+                <pre id="rawDataContent" style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Execute button click
+            $('#executeBtn').click(function () {
+                executeGraphQLQuery();
+            });
+
+            // Clear button click
+            $('#clearBtn').click(function () {
+                $('#queryInput').val('');
+                $('#resultsContainer').hide();
+                $('#errorContainer').hide();
+                $('#rawDataContainer').hide();
+            });
+
+            // Allow Ctrl+Enter to execute query
+            $('#queryInput').keydown(function (e) {
+                if (e.ctrlKey && e.keyCode === 13) {
+                    executeGraphQLQuery();
+                    return false;
+                }
+            });
+
+            function executeGraphQLQuery() {
+                var query = $('#queryInput').val().trim();
+
+                if (!query) {
+                    showError('Please enter a GraphQL query');
+                    return;
+                }
+
+                $('#loadingSpinner').show();
+                $('#resultsContainer').hide();
+                $('#errorContainer').hide();
+                $('#rawDataContainer').hide();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '@Url.Action("ExecuteGraphQLQuery", "Home")',
+                    data: { query: query },
+                    dataType: 'json',
+                    success: function (response) {
+                        $('#loadingSpinner').hide();
+
+                        if (response.success) {
+                            displayResults(response.data);
+                            displayRawData(response.rawData);
+                        } else {
+                            showError(response.message);
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        $('#loadingSpinner').hide();
+                        showError('Error executing query: ' + error);
+                    }
+                });
+            }
+
+            function displayResults(data) {
+                if (!data || !data.rows || data.rows.length === 0) {
+                    showError('No results to display');
+                    return;
+                }
+
+                var table = $('#resultsTable');
+                var thead = table.find('thead');
+                var tbody = table.find('tbody');
+
+                thead.empty();
+                tbody.empty();
+
+                // Create header
+                var headerRow = $('<tr></tr>');
+                $.each(data.columns, function (index, column) {
+                    headerRow.append($('<th></th>').text(column));
+                });
+                thead.append(headerRow);
+
+                // Create body rows
+                $.each(data.rows, function (index, row) {
+                    var bodyRow = $('<tr></tr>');
+                    $.each(data.columns, function (columnIndex, column) {
+                        var cellValue = row[column] || '-';
+                        // Truncate long values
+                        if (cellValue.length > 100) {
+                            cellValue = cellValue.substring(0, 100) + '...';
+                        }
+                        bodyRow.append($('<td></td>').text(cellValue));
+                    });
+                    tbody.append(bodyRow);
+                });
+
+                $('#resultsContainer').show();
+            }
+
+            function displayRawData(rawData) {
+                try {
+                    var jsonData = JSON.parse(rawData);
+                    var formatted = JSON.stringify(jsonData, null, 2);
+                    $('#rawDataContent').text(formatted);
+                    $('#rawDataContainer').show();
+                } catch (e) {
+                    $('#rawDataContent').text(rawData);
+                    $('#rawDataContainer').show();
+                }
+            }
+
+            function showError(message) {
+                $('#errorMessage').text(message);
+                $('#errorContainer').show();
+            }
+        });
+    </script>
+}
+
+<style>
+    .table {
+        font-size: 0.95rem;
+    }
+
+    .table thead th {
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    textarea {
+        font-family: 'Courier New', Courier, monospace;
+    }
+
+    pre {
+        font-size: 0.9rem;
+    }
+</style>
